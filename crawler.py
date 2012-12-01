@@ -29,7 +29,7 @@ Rediset can be used in this way
 try:
     urllib2.socket.setdefaulttimeout(TIMEOUT)
 except Exception:
-    urllib2.socket.setdefaulttimeout(10)
+    urllib2.socket.setdefaulttimeout(15)
 
 
 class RedisQueueException(Exception):
