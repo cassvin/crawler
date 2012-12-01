@@ -1,0 +1,21 @@
+Demand Description:
+
+1. 24小时不停的逛一个网站，如(http://m.sohu.com/)。
+
+2. 记录网站上出错的链接及出错链接的返回状态、内容等信息。
+
+3. 记录打开慢的网页，比如超过2秒。
+
+4. 分时段(小时，天)统计网站几个主要类型的网页打开的平均时间。
+
+比如http://m.sohu.com 上的主要网页类型:
+
+/n/xxx/ 新闻正文页 http://m.sohu.com/n/358627048/
+
+/p/xxx/ 组图正文页 http://m.sohu.com/p/397297/
+
+/c/xxx/ 频道首页 http://m.sohu.com/c/55/
+
+We log data needed in text file but not in database
+
+We use redis as our url queue server
