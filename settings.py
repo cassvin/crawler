@@ -12,6 +12,10 @@ CRAWLER_NUMBER = 2
 # Url that spend more than $delaytime seconds will be logged
 DELAY_TIME = 2
 
+# Downloader will wait for $WAIT_TIME seconds 
+# to continue next download
+WAIT_TIME = 2
+
 # Log files directory
 ROOT_LOG = 'log'
 DELAY_LOG = 'delay'
