@@ -1,9 +1,0 @@
-#! /usr/bin/env python
-# -*- coding: utf-8 -*-
-
-# We define crawl to be a kind of command utility
-# It read settings.py and walk through the specified site
-#
-# Now let's begin
-
-import settings
