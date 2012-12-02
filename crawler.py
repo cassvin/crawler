@@ -207,6 +207,8 @@ class Downloader:
                 self._error_logger.write('%s,, %s, %s,\n' % (url, \
                         'timeout', cur_time))
             return None
+        except urllib2.URLError, e:
+            pass
 
         duration = time.time() - starttime
 
@@ -241,7 +243,8 @@ class UrlExtractor:
         self._anchor_re = re.compile(r'#')
         self._absolute_url_re = re.compile(r'http')
         self._host = host if host else 'http://m.sohu.com'
-        self._email_re = re.compile(r'mailto')
+        self._email_re = re.compile(r'mailto:')
+        self._js_re = re.compile(r'javascript:')
         domain = domain if domain else 'm.sohu.com'
         self._domain_re = re.compile(r'http://(\w+\.)*%s' % domain)
 
@@ -271,6 +274,8 @@ class UrlExtractor:
             if self._anchor_re.match(href):
                 continue
             if self._email_re.match(href):
+                continue
+            if self._js_re.match(href):
                 continue
             if not self._absolute_url_re.match(href):
                 href = self._host + href
