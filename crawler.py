@@ -208,6 +208,8 @@ class Downloader:
                         'timeout', cur_time))
             return None
 
+        duration = time.time() - starttime
+
         # Cause the url we request may make a redirect
         # So we need check it out after
         if not self._domain_re.match(resp.url):
@@ -220,7 +222,6 @@ class Downloader:
                             '404 page which returns 200 code', cur_time))
             return None
 
-        duration = time.time() - starttime
         if duration > self._delay_time:
             if self._delay_logger:
                 self._delay_logger.write('%s, %1.2f, %s,\n' % \
