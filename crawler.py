@@ -5,6 +5,7 @@ import os
 import re
 import urllib2
 import gevent
+import gevent.coros
 import time
 import datetime
 import redis
@@ -54,22 +55,23 @@ class CrawlerEngine:
         if not isinstance(start_urls, list):
             raise TypeError, "Parameter 'start_urls' should be a list"
         try:
-            self.delay_logger = open(os.path.join(ROOT_LOG, DELAY_LOG + '.log'), 'w')
-            self.error_logger = open(os.path.join(ROOT_LOG, ERROR_LOG + '.log'), 'w')
+            self._delay_logger = open(os.path.join(ROOT_LOG, DELAY_LOG + '.log'), 'w')
+            self._error_logger = open(os.path.join(ROOT_LOG, ERROR_LOG + '.log'), 'w')
         except IOError:
             raise LogFileException, 'Failed to open log file'
 
-        redis_client = redis.Redis(host=REDIS_HOST, port=int(REDIS_PORT))
-        redis_client.delete('downloaded_url_set', 'todownload_url_queue', \
-                            'todownload_url_set')
+        self._redis_client = redis.Redis(host=REDIS_HOST, port=int(REDIS_PORT))
+        self._redis_client.delete('downloaded_url_set', 'todownload_url_set', \
+                            'todownload_url_queue')
         self.downloaded_url = Rediset(hash_generated_keys=True, \
-                redis_client=redis_client).Set('downloaded_url_set')
+                redis_client=self._redis_client).Set('downloaded_url_set')
         self.todownload_url_queue = Queue('todownload_url_queue', \
                 host=REDIS_HOST, port=REDIS_PORT)
         self.todownload_url_set = Rediset(hash_generated_keys=True, \
-                redis_client=redis_client).Set('todownload_url_set')
+                redis_client=self._redis_client).Set('todownload_url_set')
 
         self._push_to_queue(start_urls)
+        self._rlock = gevent.coros.RLock()
 
     
     def _push_to_queue(self, urls):
@@ -80,15 +82,20 @@ class CrawlerEngine:
         except redis.exceptions.ConnectionError, e:
             raise RedisQueueException, 'Failed to connect to redis server'
 
+
+    def clear_data(self):
+        self._redis_client.delete('downloaded_url_set', 'todownload_url_set', \
+                            'todownload_url_queue')
     
+
     def set_delay_logger(self, directory):
         self._delay_logger.close()
-        self.delay_logger = open(directory, 'w')
+        self._delay_logger = open(directory, 'w')
 
 
     def set_error_logger(self, directory):
         self._error_logger.close()
-        self.error_logger = open(directory, 'w')
+        self._error_logger = open(directory, 'w')
 
 
     def start(self):
@@ -100,8 +107,8 @@ class CrawlerEngine:
         
 
     def _run(self):
-        downloader = Downloader(delay_logger=self.delay_logger, \
-                error_logger=self.error_logger, domain=DOMAIN)
+        downloader = Downloader(delay_logger=self._delay_logger, \
+                error_logger=self._error_logger, domain=DOMAIN)
         urlextractor = UrlExtractor(host=SITE, domain=DOMAIN)
 
         while True:
@@ -120,11 +127,13 @@ class CrawlerEngine:
                 continue
             self.downloaded_url.add(url)
             urls = urlextractor.extract(html)
+            self._rlock.acquire()
             urls = self._filter_undownloaded_urls(urls)
             self.todownload_url_queue.extend(urls)
             for url in urls:
                 # cause the urls is too large, we need to add it one by one
                 self.todownload_url_set.add(url)
+            self._rlock.release()
             if not (WAIT_TIME is None):
                 gevent.sleep(WAIT_TIME)
 
@@ -207,7 +216,7 @@ class Downloader:
         html = resp.read()
         if self._404_re.search(html):
             if self._error_logger:
-                self._error_logger.write('%s, %d, %s, %s,\n', (resp.url, 404, \
+                self._error_logger.write('%s, %d, %s, %s,\n' % (resp.url, 404, \
                             '404 page which returns 200 code', cur_time))
             return None
 
@@ -252,7 +261,7 @@ class UrlExtractor:
         '''
 
         url_eles = PyQuery(html)('a')
-        urls = []
+        urls = {}
         for ele in url_eles:
             try:
                 href = ele.attrib['href']
@@ -266,5 +275,5 @@ class UrlExtractor:
                 href = self._host + href
             if not self._domain_re.match(href):
                 continue
-            urls.append(href)
-        return urls
+            urls[href] = 1
+        return urls.keys()
