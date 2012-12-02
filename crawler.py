@@ -4,6 +4,7 @@
 import os
 import re
 import urllib2
+import httplib
 import gevent
 import gevent.coros
 import time
@@ -61,8 +62,11 @@ class CrawlerEngine:
             raise LogFileException, 'Failed to open log file'
 
         self._redis_client = redis.Redis(host=REDIS_HOST, port=int(REDIS_PORT))
-        self._redis_client.delete('downloaded_url_set', 'todownload_url_set', \
-                            'todownload_url_queue')
+        try:
+            self._redis_client.delete('downloaded_url_set', \
+                        'todownload_url_set', 'todownload_url_queue')
+        except redis.exceptions.ConnectionError, e:
+            raise RedisQueueException, 'Failed to connect to redis server'
         self.downloaded_url = Rediset(hash_generated_keys=True, \
                 redis_client=self._redis_client).Set('downloaded_url_set')
         self.todownload_url_queue = Queue('todownload_url_queue', \
@@ -109,7 +113,7 @@ class CrawlerEngine:
     def _run(self):
         downloader = Downloader(delay_logger=self._delay_logger, \
                 error_logger=self._error_logger, domain=DOMAIN)
-        urlextractor = UrlExtractor(host=SITE, domain=DOMAIN)
+        urlextractor = UrlExtractor(host=HOST, domain=DOMAIN)
 
         while True:
             try:
@@ -123,9 +127,9 @@ class CrawlerEngine:
 
             self.todownload_url_set.remove(url)
             html = downloader.get(url)
+            self.downloaded_url.add(url)
             if not html:
                 continue
-            self.downloaded_url.add(url)
             urls = urlextractor.extract(html)
             self._rlock.acquire()
             urls = self._filter_undownloaded_urls(urls)
@@ -191,7 +195,7 @@ class Downloader:
         Do logging works after downloading the page
         '''
 
-        print '%s will be downloaded' % url
+        print url
         cur_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         starttime = time.time()
         try:
@@ -203,13 +207,15 @@ class Downloader:
                                 resp.code, resp.msg, cur_time))
             return None
         except urllib2.URLError, e:
+            print 'URLError: %s' % url
             if self._error_logger:
-                if isinstance(e.reason, urllib2.socket.timeout):
-                    self._error_logger.write('%s,, %s, %s,\n' % (url, \
-                            'timeout', cur_time))
-                else:
-                    self._error_logger.write('%s,, %s, %s,\n' % (url, \
-                            'urllib2.URLError(not timeout)', cur_time))
+                self._error_logger.write('%s,, %s, %s,\n' % (url, \
+                        e.reason.strerror, cur_time))
+            return None
+        except httplib.InvalidURL, e:
+            if self._error_logger:
+                self._error_logger.write('%s,,%s, %s,\n' % (url, \
+                        e.message, cur_time))
             return None
 
         duration = time.time() - starttime

@@ -7,8 +7,7 @@
 # Now let's begin
 
 from crawler import CrawlerEngine
-from settings import SITE
 
 if __name__ == '__main__':
-    engine = CrawlerEngine([SITE,])
-    engine.start()
+    cengine = CrawlerEngine(['http://m.sohu.com',])
+    cengine.start()
