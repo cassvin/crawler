@@ -7,11 +7,11 @@ import urllib2
 import gevent
 import time
 import datetime
+import redis
 from settings import *
 from pyquery import PyQuery
 from redis_queue import Queue
 from rediset import Rediset
-from redis import Redis
 
 
 try:
@@ -54,18 +54,20 @@ class CrawlerEngine:
         if not isinstance(start_urls, list):
             raise TypeError, "Parameter 'start_urls' should be a list"
         try:
-            delay_logger = open(os.path.join(ROOT_LOG, DELAY_LOG + '.log'), 'a')
-            error_logger = open(os.path.join(ROOT_LOG, ERROR_LOG + '.log'), 'a')
+            self.delay_logger = open(os.path.join(ROOT_LOG, DELAY_LOG + '.log'), 'w')
+            self.error_logger = open(os.path.join(ROOT_LOG, ERROR_LOG + '.log'), 'w')
         except IOError:
             raise LogFileException, 'Failed to open log file'
 
-        redis_client = Redis(host=REDIS_HOST, port=REDIS_PORT)
-        downloaded_url = Rediset(hash_generated_keys=True, \
-                redis_client=redis_client).Set('downloaded_url')
-        todownload_url_queue = Queue('todownload_url_queue', \
+        redis_client = redis.Redis(host=REDIS_HOST, port=int(REDIS_PORT))
+        redis_client.delete('downloaded_url_set', 'todownload_url_queue', \
+                            'todownload_url_set')
+        self.downloaded_url = Rediset(hash_generated_keys=True, \
+                redis_client=redis_client).Set('downloaded_url_set')
+        self.todownload_url_queue = Queue('todownload_url_queue', \
                 host=REDIS_HOST, port=REDIS_PORT)
-        todownload_url_set = Rediset(hash_generated_keys=True, \
-                redis_client=redis_client).Set('todownloade_url_set')
+        self.todownload_url_set = Rediset(hash_generated_keys=True, \
+                redis_client=redis_client).Set('todownload_url_set')
 
         self._push_to_queue(start_urls)
 
@@ -80,39 +82,35 @@ class CrawlerEngine:
 
     
     def set_delay_logger(self, directory):
+        self._delay_logger.close()
         self.delay_logger = open(directory, 'w')
 
 
     def set_error_logger(self, directory):
+        self._error_logger.close()
         self.error_logger = open(directory, 'w')
 
 
     def start(self):
         greenlets = []
         for i in xrange(CRAWLER_NUMBER):
-            downloader = Downloader(delay_logge=self.delay_logger, \
-                    error_logger=self.error_logger, domain=DOMAIN)
-            urlextractor = (UrlExtractor(host=SITE, domain=DOMAIN)
-            greenlets.append(gevent.spawn(self._run, self, \
-                    downloader, urlextractor))
+            greenlets.append(gevent.spawn(self._run))
 
         gevent.joinall(greenlets)
         
 
-    def _run(self, downloader, UrlExtractor):
-        '''
-        downloader = Downloader(delay_logge=self.delay_logger, \
+    def _run(self):
+        downloader = Downloader(delay_logger=self.delay_logger, \
                 error_logger=self.error_logger, domain=DOMAIN)
         urlextractor = UrlExtractor(host=SITE, domain=DOMAIN)
-        '''
 
         while True:
             try:
-                url = self.todownload_url_queue.pop()
+                url = self.todownload_url_queue.popleft()
             except IndexError, e:
                 gevent.sleep(5)
                 try:
-                    url = self.todownload_url_queue.pop()
+                    url = self.todownload_url_queue.popleft()
                 except IndexError, e:
                     break
 
@@ -120,11 +118,13 @@ class CrawlerEngine:
             html = downloader.get(url)
             if not html:
                 continue
-            self.downloaded_urls.add(url)
+            self.downloaded_url.add(url)
             urls = urlextractor.extract(html)
             urls = self._filter_undownloaded_urls(urls)
             self.todownload_url_queue.extend(urls)
-            self.todownload_url_set.add(*urls)
+            for url in urls:
+                # cause the urls is too large, we need to add it one by one
+                self.todownload_url_set.add(url)
             if not (WAIT_TIME is None):
                 gevent.sleep(WAIT_TIME)
 
@@ -134,7 +134,7 @@ class CrawlerEngine:
     def _filter_undownloaded_urls(self, urls):
         undownloaded_urls = []
         for url in urls:
-            if url in self.downloaded_urls or \
+            if url in self.downloaded_url or \
                     url in self.todownload_url_set:
                 continue
             undownloaded_urls.append(url)
@@ -154,7 +154,7 @@ class Downloader:
         self._opener.addheaders = [
             ('User-Agent', 'Mozilla/5.0'),        
         ]
-        self._delay_time = CrawlerEngine.DELAY_TIME
+        self._delay_time = DELAY_TIME
         self._delay_logger = delay_logger
         self._error_logger = error_logger
         self._404_re = re.compile(r'404：页面没有找到。')
@@ -182,6 +182,7 @@ class Downloader:
         Do logging works after downloading the page
         '''
 
+        print '%s will be downloaded' % url
         cur_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         starttime = time.time()
         try:
@@ -189,12 +190,12 @@ class Downloader:
         except urllib2.HTTPError, resp:
             if self._domain_re.match(resp.url):
                 if self._error_logger:
-                    self._error_logger.write('%s, %d, %s, %s,\n', (resp.url, \
+                    self._error_logger.write('%s, %d, %s, %s,\n' %  (resp.url, \
                                 resp.code, resp.msg, cur_time))
             return None
         except urllib2.socket.timeout, e:
             if self._error_logger:
-                self._error_logger.write('%s,, %s, %s,\n', (url, \
+                self._error_logger.write('%s,, %s, %s,\n' % (url, \
                         'timeout', cur_time))
             return None
 
@@ -203,6 +204,7 @@ class Downloader:
         if not self._domain_re.match(resp.url):
             return None
 
+        html = resp.read()
         if self._404_re.search(html):
             if self._error_logger:
                 self._error_logger.write('%s, %d, %s, %s,\n', (resp.url, 404, \
@@ -215,7 +217,6 @@ class Downloader:
                 self._delay_logger.write('%s, %1.2f, %s,\n' % \
                             (resp.url, duration, cur_time))
 
-        html = resp.read()
         return html
 
 
@@ -230,6 +231,7 @@ class UrlExtractor:
         self._anchor_re = re.compile(r'#')
         self._absolute_url_re = re.compile(r'http')
         self._host = host if host else 'http://m.sohu.com'
+        self._email_re = re.compile(r'mailto')
         domain = domain if domain else 'm.sohu.com'
         self._domain_re = re.compile(r'http://(\w+\.)*%s' % domain)
 
@@ -257,6 +259,8 @@ class UrlExtractor:
             except KeyError, e:
                 continue
             if self._anchor_re.match(href):
+                continue
+            if self._email_re.match(href):
                 continue
             if not self._absolute_url_re.match(href):
                 href = self._host + href

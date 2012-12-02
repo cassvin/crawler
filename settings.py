@@ -3,7 +3,7 @@
 
 # Pages those are not belong to domain
 # will not be crawled
-DOMAIN = 'sohu.com'
+DOMAIN = 'm.sohu.com'
 SITE = 'http://m.sohu.com'
 
 # Numbers of crawlers
@@ -24,4 +24,4 @@ ERROR_LOG = 'error'
 # I adopt redis as url queue
 # Redis settings
 REDIS_HOST = 'localhost'
-REDIS_PORT = '6379'
+REDIS_PORT = 6379
