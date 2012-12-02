@@ -202,13 +202,15 @@ class Downloader:
                     self._error_logger.write('%s, %d, %s, %s,\n' %  (resp.url, \
                                 resp.code, resp.msg, cur_time))
             return None
-        except urllib2.socket.timeout, e:
-            if self._error_logger:
-                self._error_logger.write('%s,, %s, %s,\n' % (url, \
-                        'timeout', cur_time))
-            return None
         except urllib2.URLError, e:
-            pass
+            if self._error_logger:
+                if isinstance(e.reason, urllib2.socket.timeout):
+                    self._error_logger.write('%s,, %s, %s,\n' % (url, \
+                            'timeout', cur_time))
+                else:
+                    self._error_logger.write('%s,, %s, %s,\n' % (url, \
+                            'urllib2.URLError(not timeout)', cur_time))
+            return None
 
         duration = time.time() - starttime
 
