@@ -249,8 +249,9 @@ class Downloader:
 
         # Cause the url we request may make a redirect
         # So we need check it out after
-        if not self._domain_re.match(resp.url):
-            return None
+        if self._domain_re:
+            if not self._domain_re.match(resp.url):
+                return None
 
         html = resp.read()
         if self._404_re.search(html):
@@ -266,8 +267,18 @@ class Downloader:
 
         # cause we have check the url before, we neen't 
         # to do forward check but just get it's value
-        # host = self._host_re.match(resp.url).group(0)
         return (resp.url, html)
+
+
+    def get_download_time(self, url):
+        starttime = time.time()
+        try:
+            resp = self._opener.open(url)
+        except Exception, e:
+            return None
+
+        duration = time.time() - starttime
+        return duration
 
 
 class UrlExtractor:
