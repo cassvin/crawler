@@ -152,10 +152,10 @@ class CrawlerEngine:
             self.downloaded_url.add(url)
             if data is None:
                 continue
-            host = data[0]
+            _url = data[0]
             html = data[1]
-            urlextractor.set_host(host)
-            urls = urlextractor.extract(html)
+            # urlextractor.set_host(host)
+            urls = urlextractor.extract(_url, html)
             self._rlock.acquire()
             urls = self._filter_undownloaded_urls(urls)
             self.todownload_url_queue.extend(urls)
@@ -196,7 +196,6 @@ class Downloader:
         self._404_re = re.compile(r'404：页面没有找到。')
         domain = domain if domain else 'm.sohu.com'
         self._domain_re = re.compile(r'http://(\w+\.)*%s' % domain)
-        self._host_re = self._domain_re
     
 
     def set_domain(self, domain):
@@ -267,8 +266,8 @@ class Downloader:
 
         # cause we have check the url before, we neen't 
         # to do forward check but just get it's value
-        host = self._host_re.match(resp.url).group(0)
-        return (host, html)
+        # host = self._host_re.match(resp.url).group(0)
+        return (resp.url, html)
 
 
 class UrlExtractor:
@@ -278,14 +277,16 @@ class UrlExtractor:
     undownloaded url then push them into the queue.
     '''
 
-    def __init__(self, host=None, domain=None):
+    def __init__(self, domain=None):
         self._anchor_re = re.compile(r'#')
         self._absolute_url_re = re.compile(r'http')
-        self._host = host if host else 'http://m.sohu.com'
         self._email_re = re.compile(r'mailto:')
         self._js_re = re.compile(r'javascript:')
         domain = domain if domain else 'm.sohu.com'
         self._domain_re = re.compile(r'http://(\w+\.)*%s' % domain)
+        self._prefix_re = re.compile(r'/')
+        self._relative_url_re = re.compile(r'/\.\.')
+        self._parent_dir_re = re.compile(r'http://(\w+\.)*%s/(\w+)/' % domain)
 
 
     def set_domain(self, domain):
@@ -296,13 +297,16 @@ class UrlExtractor:
         self._host = host
 
 
-    def extract(self, html):
+    def extract(self, url, html):
         '''
         Extract the urls from the given web page
         Return absoulte url, filter those don't belong to the specified domain
         Anchors are filtered as well
         '''
 
+        host = self._domain_re.match(url).group(0)
+        if not host:
+            host = 'http://m.sohu.com'
         url_eles = PyQuery(html)('a')
         urls = {}
         for ele in url_eles:
@@ -317,7 +321,15 @@ class UrlExtractor:
             if self._js_re.match(href):
                 continue
             if not self._absolute_url_re.match(href):
-                href = self._host + href
+                if not self._prefix_re.match(href):
+                    href = '/' + href
+                if self._relative_url_re.match(href):
+                    try:
+                        parent_dir = self._parent_dir_re.match(url).groups(0)[1]
+                        href = href[:3].replace('..', parent_dir) + href[3:]
+                    except Exception, e:
+                        pass
+                href = host + href
             if not self._domain_re.match(href):
                 continue
             urls[href] = 1

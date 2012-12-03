@@ -14,7 +14,7 @@ Refer to the file [run] and [settings.py], you guys just type ./run and the craw
 
 ## Demand Description
 
-(Sorry I use Chinese here, I will translate them to English sooner or later)
+(Chinese here, I will translate them into English sooner or later)
 
 * 24小时不停的逛一个网站，如(http://m.sohu.com/)。
 
