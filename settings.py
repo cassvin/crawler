@@ -27,4 +27,4 @@ REDIS_PORT = 6379
 
 # For statistic
 LINK_DIR = 'links'
-STATISTIC_DIR = 'statistic_dir'
+STATISTIC_DIR = 'statistic_data'

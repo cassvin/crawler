@@ -19,9 +19,9 @@ except ImportError, e:
 
 fp_link = {}
 fp_statistic = {}
-for filename in os.listdir(link_dir):
-    fp_link[filename] = open(os.path.join(link_dir, filename), 'r')
-    fp_statistic[filename] = open(os.path.join(statistic_dir, filename), 'a')
+for filename in os.listdir(LINK_DIR):
+    fp_link[filename] = open(os.path.join(LINK_DIR, filename), 'r')
+    fp_statistic[filename] = open(os.path.join(STATISTIC_DIR, filename), 'a')
 
 
 def statistic(links, logger, _type=None):
