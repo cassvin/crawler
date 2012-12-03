@@ -21,6 +21,8 @@ try:
 except Exception:
     urllib2.socket.setdefaulttimeout(15)
 
+if not 'DOMAIN' in globals():
+    DOMAIN = 'm.sohu.com'
 if not 'ROOT_LOG' in globals():
     ROOT_LOG = 'log'
 if not 'DELAY_LOG' in globals():
@@ -113,7 +115,7 @@ class CrawlerEngine:
     def _run(self):
         downloader = Downloader(delay_logger=self._delay_logger, \
                 error_logger=self._error_logger, domain=DOMAIN)
-        urlextractor = UrlExtractor(host=HOST, domain=DOMAIN)
+        urlextractor = UrlExtractor(domain=DOMAIN)
 
         while True:
             try:
@@ -126,10 +128,13 @@ class CrawlerEngine:
                     break
 
             self.todownload_url_set.remove(url)
-            html = downloader.get(url)
+            data = downloader.get(url)
             self.downloaded_url.add(url)
-            if not html:
+            if data is None:
                 continue
+            host = data[0]
+            html = data[1]
+            urlextractor.set_host(host)
             urls = urlextractor.extract(html)
             self._rlock.acquire()
             urls = self._filter_undownloaded_urls(urls)
@@ -173,8 +178,9 @@ class Downloader:
         self._404_re = re.compile(r'404：页面没有找到。')
         domain = domain if domain else 'm.sohu.com'
         self._domain_re = re.compile(r'http://(\w+\.)*%s' % domain)
-
+        self._host_re = self._domain_re
     
+
     def set_domain(self, domain):
         self._domain_re = re.compile(r'http://(\w+\.)*%s' % domain)
         
@@ -220,6 +226,7 @@ class Downloader:
             if self._error_logger:
                 self._error_logger.write('%s,, %s, %s,\n' % (url, \
                         e.message, cur_time))
+            return None
 
         duration = time.time() - starttime
 
@@ -240,7 +247,10 @@ class Downloader:
                 self._delay_logger.write('%s, %1.2f, %s,\n' % \
                             (resp.url, duration, cur_time))
 
-        return html
+        # cause we have check the url before, we neen't 
+        # to do forward check but just get it's value
+        host = self._host_re.match(resp.url).group(0)
+        return (host, html)
 
 
 class UrlExtractor:

@@ -4,7 +4,6 @@
 # Pages those are not belong to domain
 # will not be crawled
 DOMAIN = 'm.sohu.com'
-HOST = 'http://m.sohu.com'
 
 # Numbers of crawlers
 CRAWLER_NUMBER = 2
