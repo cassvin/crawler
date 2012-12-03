@@ -207,7 +207,6 @@ class Downloader:
                                 resp.code, resp.msg, cur_time))
             return None
         except urllib2.URLError, e:
-            print 'URLError: %s' % url
             if self._error_logger:
                 self._error_logger.write('%s,, %s, %s,\n' % (url, \
                         e.reason.strerror, cur_time))
@@ -217,6 +216,10 @@ class Downloader:
                 self._error_logger.write('%s,,%s, %s,\n' % (url, \
                         e.message, cur_time))
             return None
+        except urllib2.socket.timeout, e:
+            if self._error_logger:
+                self._error_logger.write('%s,, %s, %s,\n' % (url, \
+                        e.message, cur_time))
 
         duration = time.time() - starttime
 
