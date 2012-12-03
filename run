@@ -9,5 +9,5 @@
 from crawler import CrawlerEngine
 
 if __name__ == '__main__':
-    cengine = CrawlerEngine(['http://m.sohu.com',])
-    cengine.start()
+    cengine = CrawlerEngine()
+    cengine.start(['http://m.sohu.com',])

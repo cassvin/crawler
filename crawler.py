@@ -1,8 +1,7 @@
 #! /usr/bin/env python
 # -*- coding: utf-8 -*-
 
-import os
-import re
+import os, re
 import urllib2
 import httplib
 import gevent
@@ -10,16 +9,19 @@ import gevent.coros
 import time
 import datetime
 import redis
-from settings import *
 from pyquery import PyQuery
 from redis_queue import Queue
 from rediset import Rediset
-
 
 try:
     urllib2.socket.setdefaulttimeout(TIMEOUT)
 except Exception:
     urllib2.socket.setdefaulttimeout(15)
+
+try:
+    from settings import *
+except ImportError:
+    pass
 
 if not 'DOMAIN' in globals():
     DOMAIN = 'm.sohu.com'
@@ -54,21 +56,14 @@ class CrawlerEngine:
     Core of the Crawler
     '''
 
-    def __init__(self, start_urls):
-        if not isinstance(start_urls, list):
-            raise TypeError, "Parameter 'start_urls' should be a list"
+    def __init__(self):
         try:
-            self._delay_logger = open(os.path.join(ROOT_LOG, DELAY_LOG + '.log'), 'w')
-            self._error_logger = open(os.path.join(ROOT_LOG, ERROR_LOG + '.log'), 'w')
+            self._delay_logger = open(os.path.join(ROOT_LOG, DELAY_LOG + '.log'), 'a')
+            self._error_logger = open(os.path.join(ROOT_LOG, ERROR_LOG + '.log'), 'a')
         except IOError:
             raise LogFileException, 'Failed to open log file'
 
         self._redis_client = redis.Redis(host=REDIS_HOST, port=int(REDIS_PORT))
-        try:
-            self._redis_client.delete('downloaded_url_set', \
-                        'todownload_url_set', 'todownload_url_queue')
-        except redis.exceptions.ConnectionError, e:
-            raise RedisQueueException, 'Failed to connect to redis server'
         self.downloaded_url = Rediset(hash_generated_keys=True, \
                 redis_client=self._redis_client).Set('downloaded_url_set')
         self.todownload_url_queue = Queue('todownload_url_queue', \
@@ -76,7 +71,6 @@ class CrawlerEngine:
         self.todownload_url_set = Rediset(hash_generated_keys=True, \
                 redis_client=self._redis_client).Set('todownload_url_set')
 
-        self._push_to_queue(start_urls)
         self._rlock = gevent.coros.RLock()
 
     
@@ -90,26 +84,46 @@ class CrawlerEngine:
 
 
     def clear_data(self):
-        self._redis_client.delete('downloaded_url_set', 'todownload_url_set', \
+        try:
+            self._redis_client.delete('downloaded_url_set', 'todownload_url_set', \
                             'todownload_url_queue')
+        except redis.exceptions.ConnectionError, e:
+            raise RedisQueueException, 'Failed to connect to redis server'
     
 
     def set_delay_logger(self, directory):
         self._delay_logger.close()
-        self._delay_logger = open(directory, 'w')
+        self._delay_logger = open(directory, 'a')
 
 
     def set_error_logger(self, directory):
         self._error_logger.close()
-        self._error_logger = open(directory, 'w')
+        self._error_logger = open(directory, 'a')
 
 
-    def start(self):
+    def clear_delay_logger(self, directory):
+        pass
+
+
+    def clear_error_logger(self, directory):
+        pass
+
+
+    def start(self, start_urls=[], contin=False):
+        if not isinstance(start_urls, list):
+            raise TypeError, "Parameter 'start_urls' should be a list"
+        if not contin:
+            if len(start_urls) == 0:
+                raise Exception, 'You should specify at lease one start url'
+            self.clear_data()
+            self._push_to_queue(start_urls)
         greenlets = []
         for i in xrange(CRAWLER_NUMBER):
             greenlets.append(gevent.spawn(self._run))
 
         gevent.joinall(greenlets)
+
+        print 'Hey buddy, I have finished my work.'
         
 
     def _run(self):
@@ -128,7 +142,13 @@ class CrawlerEngine:
                     break
 
             self.todownload_url_set.remove(url)
-            data = downloader.get(url)
+            try:
+                data = downloader.get(url)
+            except Exception, e:
+                print 'Uncaptured exception: (%s) arise when getting url: (%s), \
+                        please check it out' % (e, url)
+                continue
+
             self.downloaded_url.add(url)
             if data is None:
                 continue
@@ -145,8 +165,6 @@ class CrawlerEngine:
             self._rlock.release()
             if not (WAIT_TIME is None):
                 gevent.sleep(WAIT_TIME)
-
-        print 'Hey buddy, I have finished my work.'
 
     
     def _filter_undownloaded_urls(self, urls):

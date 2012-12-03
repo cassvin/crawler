@@ -13,7 +13,7 @@ DELAY_TIME = 2
 
 # Downloader will wait for $WAIT_TIME seconds 
 # to continue next download
-WAIT_TIME = 6
+WAIT_TIME = 4
 
 # Log files directory
 ROOT_LOG = 'log'
