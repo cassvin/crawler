@@ -73,6 +73,9 @@ class CrawlerEngine:
 
         self._rlock = gevent.coros.RLock()
 
+
+    def __del__(self):
+        pass
     
     def _push_to_queue(self, urls):
         try:
@@ -148,8 +151,9 @@ class CrawlerEngine:
                 print 'Uncaptured exception: (%s) arise when getting url: (%s), \
                         please check it out' % (e, url)
                 continue
+            finally:
+                self.downloaded_url.add(url)
 
-            self.downloaded_url.add(url)
             if data is None:
                 continue
             _url = data[0]
