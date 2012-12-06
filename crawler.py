@@ -74,7 +74,6 @@ class CrawlerEngine:
 
         self._rlock = gevent.coros.RLock()
 
-
     def __del__(self):
         pass
 
@@ -84,14 +83,14 @@ class CrawlerEngine:
                 self.todownload_url_queue.append(url)
                 self.todownload_url_set.add(url)
         except redis.exceptions.ConnectionError:
-            raise RedisQueueException, 'Failed to connect to redis server'
+            raise RedisQueueException('Failed to connect to redis server')
 
     def clear_data(self):
         try:
             self._redis_client.delete('downloaded_url_set', 'todownload_url_set',
                                       'todownload_url_queue')
         except redis.exceptions.ConnectionError:
-            raise RedisQueueException, 'Failed to connect to redis server'
+            raise RedisQueueException('Failed to connect to redis server')
 
     def set_delay_logger(self, directory):
         self._delay_logger.close()
@@ -111,10 +110,10 @@ class CrawlerEngine:
         if start_urls is None:
             start_urls = []
         if not isinstance(start_urls, list):
-            raise (TypeError, "Parameter 'start_urls' should be a list")
+            raise TypeError("Parameter 'start_urls' should be a list")
         if not contin:
             if len(start_urls) == 0:
-                raise (Exception, 'You should specify at lease one start url')
+                raise Exception('You should specify at lease one start url')
             self.clear_data()
             self._push_to_queue(start_urls)
         greenlets = []
@@ -205,7 +204,7 @@ class Downloader:
         so I have to detect if it is a correct page.
         '''
         if not isinstance(character, str):
-            raise ValueError, 'Parameter character should be str'
+            raise ValueError('Parameter character should be str')
         self._404_re = re.compile(character)
 
     def get(self, url):
